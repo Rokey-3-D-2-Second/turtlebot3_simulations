@@ -1,60 +1,70 @@
-#!/usr/bin/env python3
-# Copyright 2019 Open Source Robotics Foundation, Inc.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-#
-# Authors: HyunGyu Kim
-
-import os
-
+from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
-from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
-
+import os
+import re
 
 def generate_launch_description():
     TURTLEBOT3_MODEL = os.environ['TURTLEBOT3_MODEL']
-
-    x_pose = LaunchConfiguration('x_pose', default='0.0')
-    y_pose = LaunchConfiguration('y_pose', default='0.0')
-    robot_name = LaunchConfiguration('robot_name', default=TURTLEBOT3_MODEL)
-    namespace = LaunchConfiguration('namespace', default='')
-    sdf_path = LaunchConfiguration('sdf_path', default='')
-
-    declare_x_position_cmd = DeclareLaunchArgument(
-        'x_pose', default_value='0.0',
-        description='Specify namespace of the robot')
-
-    declare_y_position_cmd = DeclareLaunchArgument(
-        'y_pose', default_value='0.0',
-        description='Specify namespace of the robot')
-    start_gazebo_ros_spawner_cmd = Node(
-        package='gazebo_ros',
-        executable='spawn_entity.py',
-        arguments=[
-            '-entity', robot_name,
-            '-file', sdf_path,
-            '-x', x_pose,
-            '-y', y_pose,
-            '-z', '0.01',
-            '-robot_namespace', namespace
-        ],
-        output='screen',
-    )
+    number_of_robots = 2
+    pose_list = [[0.8, -1.747], [0, -1.747]]
 
     ld = LaunchDescription()
-    ld.add_action(declare_x_position_cmd)
-    ld.add_action(declare_y_position_cmd)
-    ld.add_action(start_gazebo_ros_spawner_cmd)
+
+    for idx in range(number_of_robots):
+        robot_name = f"{TURTLEBOT3_MODEL}_{idx}"
+        namespace = f"tb3_{idx}"
+        x_pose = str(pose_list[idx][0])
+        y_pose = str(pose_list[idx][1])
+
+        sdf_path = os.path.join(
+            get_package_share_directory('turtlebot3_gazebo'),
+            'models',
+            f'turtlebot3_{TURTLEBOT3_MODEL}',
+            'model.sdf'
+        )
+
+        with open(sdf_path, 'r') as f:
+            sdf_content = f.read()
+
+        # 리더만 카메라 네임스페이스 적용
+        if idx == 0: 
+            camera_namespace = f"{namespace}/camera"
+            
+            def insert_namespace_to_camera_plugin(sdf, ns):
+                pattern = r'(<plugin[^>]*filename="libgazebo_ros_camera.so"[^>]*>)(.*?)(</plugin>)'
+                def repl(match):
+                    start, body, end = match.groups()
+                    if '<ros>' in body:
+                        if '<namespace>' in body:
+                            body = re.sub(r'<namespace>.*?</namespace>', f'<namespace>{ns}</namespace>', body)
+                        else:
+                            body = body.replace('<ros>', f'<ros>\n    <namespace>{ns}</namespace>')
+                    else:
+                        body += f'\n  <ros>\n    <namespace>{ns}</namespace>\n  </ros>'
+                    return start + body + end
+                return re.sub(pattern, repl, sdf, flags=re.DOTALL)
+            
+            sdf_content = insert_namespace_to_camera_plugin(sdf_content, camera_namespace)
+
+        tmp_sdf_path = f'/tmp/tb3_{idx}_model.sdf'
+        with open(tmp_sdf_path, 'w') as f:
+            f.write(sdf_content)
+
+        spawn_cmd = Node(
+            package='gazebo_ros',
+            executable='spawn_entity.py',
+            arguments=[
+                '-entity', robot_name,
+                '-file', tmp_sdf_path,
+                '-x', x_pose,
+                '-y', y_pose,
+                '-z', '0.01',
+                '-robot_namespace', namespace
+            ],
+            output='screen',
+            namespace=namespace
+        )
+        ld.add_action(spawn_cmd)
+
     return ld
