@@ -36,7 +36,10 @@ def generate_launch_description():
     world = os.path.join(
         get_package_share_directory('turtlebot3_gazebo'),
         'worlds',
-        'turtlebot3_autorace_2020.world'
+        # 'turtlebot3_autorace_2020.world'
+        # 'turtlebot3_autorace_2020_2.world',
+        # 'turtlebot3_autorace_2020_3.world',
+        'turtlebot3_autorace_2020_4.world',
     )
 
     gzserver_cmd = IncludeLaunchDescription(

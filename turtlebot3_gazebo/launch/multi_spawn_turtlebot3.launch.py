@@ -31,7 +31,6 @@ def generate_launch_description():
         # 리더만 카메라 네임스페이스 적용
         if idx == 0: 
             camera_namespace = f"{namespace}/camera"
-
             def insert_namespace_to_camera_plugin(sdf, ns):
                 pattern = r'(<plugin[^>]*filename="libgazebo_ros_camera.so"[^>]*>)(.*?)(</plugin>)'
                 def repl(match):
